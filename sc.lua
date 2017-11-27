@@ -3,6 +3,8 @@ local checkeda = {}
 
 local queue = { df.global.world }
 
+local sizetype = dfhack.getArchitecture() == 64 and 'uint64_t' or 'uint32_t'
+
 local function check_r(obj)
 	for k,v in pairs(obj) do
 		if df.isvalid(v) == 'ref' then
@@ -16,7 +18,7 @@ local function check_r(obj)
 				if obj:_field(k)._kind == 'primitive' and df.reinterpret_cast('uint32_t',a-8).value == 0x11223344 then
 					if not checkedt[t] then
 						checkedt[t] = true
-						local s2 = df.reinterpret_cast('uint64_t',a-16).value
+						local s2 = df.reinterpret_cast(sizetype,a-16).value
 						if s2 == s then
 							--print ('  OK')
 						else
@@ -41,7 +43,6 @@ end
 
 while #queue > 0 do
 	local v = queue[#queue]
-	--print (v)
 	table.remove(queue, #queue)
 	check_r(v)
 end
