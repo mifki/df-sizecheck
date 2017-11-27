@@ -20,8 +20,13 @@ void new_free(intptr_t p)
 
 void patch_malloc()
 {
+    // 43.05 64bit
     intptr_t faddr = 0x140c49750 + Core::getInstance().vinfo->getRebaseDelta();
     intptr_t maddr = 0x140c49758 + Core::getInstance().vinfo->getRebaseDelta();
+
+    // 44.02 64bit
+    intptr_t faddr = 0x140c85758 + Core::getInstance().vinfo->getRebaseDelta();
+    intptr_t maddr = 0x140c8575e + Core::getInstance().vinfo->getRebaseDelta();
 
     old_malloc = *(MALLOC*)maddr;
     old_free = *(FREE*)faddr;
