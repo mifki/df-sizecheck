@@ -1,48 +1,182 @@
+local guess_pointers = false
+local check_vectors = true
+local check_pointers = true
+local check_enums = true
+
+local queue = { { df.global.world, 'world' } }
+
+
 local checkedt = {}
 local checkeda = {}
-
-local queue = { df.global.world }
+local checkedp = {}
+local token = os.time()
 
 local sizetype = dfhack.getArchitecture() == 64 and 'uint64_t' or 'uint32_t'
 
-local function check_r(obj)
-	for k,v in pairs(obj) do
-		if df.isvalid(v) == 'ref' then
-			if v and v._kind == 'container' then
-				table.insert(queue, v)
-			
-			elseif v and v._kind == 'struct' then
-				local s, a = v:sizeof()
-				local t = v._type
+local mem_ranges = {}
+local mem_start, mem_end
 
-				if obj:_field(k)._kind == 'primitive' and df.reinterpret_cast('uint32_t',a-8).value == 0x11223344 then
-					if not checkedt[t] then
-						checkedt[t] = true
-						local s2 = df.reinterpret_cast(sizetype,a-16).value
-						if s2 == s then
-							--print ('  OK')
-						else
-							print (t)
-							print ('  NOT OK '.. s .. '  ' .. s2)
-						end
-					end
+local function is_valid_address(ptr)
+    if ptr < mem_ranges[1].start_addr or ptr > mem_ranges[#mem_ranges].end_addr then
+        return false
+    end
 
-					if df.reinterpret_cast('uint32_t',a-4).value ~= 0x44332211 then
-						df.reinterpret_cast('uint32_t',a-4).value = 0x44332211
-						table.insert(queue, v)
-					end
+    for k,mem in ipairs(mem_ranges) do
+        if ptr >= mem.start_addr and ptr < mem.end_addr then
+            return true
+        end
+    end
 
-				elseif not checkeda[a] then
-					checkeda[a] = true
-					table.insert(queue, v)
-				end
-			end
-		end
-	end
+    return false
 end
 
+local function is_valid_vector(ref)
+    local ints = df.reinterpret_cast(sizetype, ref)
+
+    if ints[0] == 0 and ints[1] == 0 and ints[2] == 0 then
+        return true
+    end
+
+    if ints[1] == 0 then
+        return ints[0] <= ints[2]
+    end
+
+    return ints[0] <= ints[1] and ints[1] <= ints[2]
+           --and is_valid_address(ints[0]) and is_valid_address(ints[1]) and is_valid_address(ints[2])
+end
+
+local function bold(s)
+    dfhack.color(8)
+    print(s)
+    dfhack.color(-1)
+end
+
+local function warn(s)
+    dfhack.color(6)
+    print(s)
+    dfhack.color(-1)
+end
+
+local function err(s)
+    dfhack.color(4)
+    print(s)
+    dfhack.color(-1)
+end
+
+local function check_container(obj, path)
+    for k,v in pairs(obj) do
+        if df.isvalid(v) == 'ref' then
+            local s, a = v:sizeof()
+        
+            if v and v._kind == 'container' and k ~= 'bad' then
+                if tostring(v._type):sub(1,6) == 'vector' and check_vectors and not is_valid_vector(a) then
+                    local key = tostring(obj._type) .. '.' .. k
+                    if not checkedp[key] then
+                        checkedp[key] = true
+                        bold(path .. ' ' .. tostring(obj._type) .. ' -> ' .. k)
+                        err('  INVALID VECTOR, SKIPPING REST OF THE TYPE')
+                    end
+                    return
+                end
+
+                table.insert(queue, { v, path .. '.' .. k })
+            
+            elseif v and v._kind == 'struct' then
+                local t = v._type
+
+                if check_pointers and not is_valid_address(a) then
+                    local key = tostring(obj._type) .. '.' .. k
+                    if not checkedp[key] then
+                        checkedp[key] = true
+                        bold(path .. ' ' .. tostring(obj._type) .. ' -> ' .. k)
+                        err('  INVALID ADDRESS, SKIPPING REST OF THE TYPE')
+                    end
+                    return
+                end
+
+                -- the first check is to process pointers only, not nested structures
+                if obj:_field(k)._kind == 'primitive' and df.reinterpret_cast('uint32_t',a-8).value == 0x11223344 then
+                    if not checkedt[t] then
+                        checkedt[t] = true
+                        local s2 = df.reinterpret_cast(sizetype,a-16).value
+                        if s2 == s then
+                            --print ('  OK')
+                        else
+                            bold (t)
+                            err ('  NOT OK '.. s .. ' ' .. s2)
+                        end
+                    end
+
+                    if df.reinterpret_cast('uint32_t',a-4).value ~= token then
+                        df.reinterpret_cast('uint32_t',a-4).value = token
+                        table.insert(queue, { v, path .. '.' .. k })
+                    end
+
+                elseif not checkeda[a] then
+                    checkeda[a] = true
+                    table.insert(queue, { v, path .. '.' .. k })
+                end
+            end
+
+        else
+            local field = obj:_field(k)
+            if field then
+                if guess_pointers then
+                    if field._type == 'void*'
+                    or field._type == 'int64_t' or field._type == 'uint64_t'
+                    or field._type == 'int32_t' or field._type == 'uint32_t' then
+                        local s,a = field:sizeof()
+                        local val = df.reinterpret_cast(sizetype, a).value
+
+                        if is_valid_address(val) and df.reinterpret_cast('uint32_t',a-8).value == 0x11223344 then
+                            local key = tostring(obj._type) .. '.' .. k
+                            if not checkedp[key] then
+                                checkedp[key] = true
+                                bold(path .. ' ' .. tostring(obj._type) .. ' -> ' .. k)
+                                print('  POINTER TO STRUCT '..df.reinterpret_cast(sizetype,a-16).value)
+                            end
+                        end
+                    end
+                end
+
+                -- is there a better way to detect enums?
+                if check_enums then
+                    -- limiting "unknown" enum values to filter out uninitialised garbage
+                    if field._kind == 'primitive' and field._type[0] and not field._type[field.value] 
+                    and field.value >= -1 and field.value < 512 then
+                        local key = tostring(obj._type) .. '.' .. k .. tostring(field.value)
+                        if not checkedp[key] then
+                            checkedp[key] = true
+                            bold(path .. ' ' .. tostring(obj._type) .. ' -> ' .. k)
+                            warn('  INVALID ENUM VALUE ' .. tostring(field._type) .. ' ' .. field.value)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+
+for i,mem in ipairs(dfhack.internal.getMemRanges()) do
+    if mem.read and mem.write then
+        -- concatename nearby regions, otherwise there are too many, and checks are very slow
+        if #mem_ranges > 0 and mem.start_addr - mem_ranges[#mem_ranges].end_addr < 1024*1024*10 then
+            mem_ranges[#mem_ranges].end_addr = mem.end_addr
+        else
+            table.insert(mem_ranges, mem)
+        end
+
+        if not mem_start then
+            mem_start = mem.start_addr
+        end
+        mem_end = mem.end_addr
+    end
+end
+
+-- not really a queue, I know
 while #queue > 0 do
-	local v = queue[#queue]
-	table.remove(queue, #queue)
-	check_r(v)
+    local v = queue[#queue]
+    table.remove(queue, #queue)
+    check_container(v[1], v[2])
 end
