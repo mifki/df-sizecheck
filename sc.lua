@@ -149,14 +149,18 @@ local function check_container(obj, path)
 
                 -- is there a better way to detect enums?
                 if check_enums then
-                    -- limiting "unknown" enum values to filter out uninitialised garbage
-                    if field._kind == 'primitive' and field._type[0] and not field._type[field.value] 
-                    and field.value >= -1 and field.value < 512 then
-                        local key = tostring(obj._type) .. '.' .. k .. tostring(field.value)
-                        if not checkedp[key] then
-                            checkedp[key] = true
-                            bold(path .. ' ' .. tostring(obj._type) .. ' -> ' .. k)
-                            warn('  INVALID ENUM VALUE ' .. tostring(field._type) .. ' ' .. field.value)
+                    if field._kind == 'primitive' and field._type[0] and not field._type[field.value] then
+                        -- some checks to filter out uninitialised and conditional fields, enums in unions, etc.
+                        if not (obj._type == df.unit_preference and k == 'item_type')
+                        and not (obj._type == df.history_event_body_abusedst.T_props)
+                        and not (field._type == df.skill_rating) then
+                        and field.value >= -1 and field.value < 1024 then                        
+                            local key = tostring(obj._type) .. '.' .. k .. tostring(field.value)
+                            if not checkedp[key] then
+                                checkedp[key] = true
+                                bold(path .. ' ' .. tostring(obj._type) .. ' -> ' .. k)
+                                warn('  INVALID ENUM VALUE ' .. tostring(field._type) .. ' ' .. field.value)
+                            end
                         end
                     end
                 end
