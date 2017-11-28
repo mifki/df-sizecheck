@@ -152,8 +152,10 @@ local function check_container(obj, path)
                     if field._kind == 'primitive' and field._type[0] and not field._type[field.value] then
                         -- some checks to filter out uninitialised and conditional fields, enums in unions, etc.
                         if not (obj._type == df.unit_preference and k == 'item_type')
+                        and not (obj._type == df.unit.T_job and k == 'mood_skill')
+                        and not (obj._type == df.unit and k == 'idle_area_type')
                         and not (obj._type == df.history_event_body_abusedst.T_props)
-                        and not (field._type == df.skill_rating) then
+                        and not (field._type == df.skill_rating)
                         and field.value >= -1 and field.value < 1024 then                        
                             local key = tostring(obj._type) .. '.' .. k .. tostring(field.value)
                             if not checkedp[key] then
