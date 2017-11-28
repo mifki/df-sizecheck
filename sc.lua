@@ -3,8 +3,16 @@ local check_vectors = true
 local check_pointers = true
 local check_enums = true
 
-local queue = { { df.global.world, 'world' } }
 
+-- not really a queue, I know
+local queue
+
+local args = {...}
+if #args == 1 then
+    queue = { { load('return '..args[1])(), args[1] } }
+else
+    queue = { { df.global.world, 'world' } }
+end
 
 local checkedt = {}
 local checkeda = {}
@@ -174,7 +182,6 @@ for i,mem in ipairs(dfhack.internal.getMemRanges()) do
     end
 end
 
--- not really a queue, I know
 while #queue > 0 do
     local v = queue[#queue]
     table.remove(queue, #queue)
