@@ -26,7 +26,7 @@ local checkeda = {}
 local checkedp = {}
 local token = os.time()
 
-local sizetype = dfhack.getArchitecture() == 64 and 'uint64_t' or 'uint32_t'
+local sizetype = 'uintptr_t'
 
 local mem_ranges = {}
 local mem_start, mem_end
