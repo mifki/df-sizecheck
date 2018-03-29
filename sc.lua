@@ -8,7 +8,14 @@ local check_enums = true
 local queue
 
 local args = {...}
-if #args == 1 then
+if args[1] == '-all' then
+    queue = {}
+    for k, v in pairs(df.global) do
+        if type(v) == 'userdata' then
+            table.insert(queue, { v, k })
+        end
+    end
+elseif #args == 1 then
     queue = { { load('return '..args[1])(), args[1] } }
 else
     queue = { { df.global.world, 'world' } }
