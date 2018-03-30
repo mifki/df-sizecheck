@@ -8,7 +8,14 @@ local check_enums = true
 local queue
 
 local args = {...}
-if #args == 1 then
+if args[1] == '-all' then
+    queue = {}
+    for k, v in pairs(df.global) do
+        if type(v) == 'userdata' then
+            table.insert(queue, { v, k })
+        end
+    end
+elseif #args == 1 then
     queue = { { load('return '..args[1])(), args[1] } }
 else
     queue = { { df.global.world, 'world' } }
@@ -19,7 +26,7 @@ local checkeda = {}
 local checkedp = {}
 local token = os.time()
 
-local sizetype = dfhack.getArchitecture() == 64 and 'uint64_t' or 'uint32_t'
+local sizetype = 'uintptr_t'
 
 local mem_ranges = {}
 local mem_start, mem_end
@@ -71,11 +78,19 @@ local function err(s)
     dfhack.color(-1)
 end
 
+prog = '|/-\\'
+local count = -1
 local function check_container(obj, path)
+    count = count + 1
+    if count % 500 == 0 then
+        local i = ((count / 500) % 4) + 1
+        dfhack.print(prog:sub(i, i) .. '\r')
+        dfhack.console.flush()
+    end
     for k,v in pairs(obj) do
         if df.isvalid(v) == 'ref' then
             local s, a = v:sizeof()
-        
+
             if v and v._kind == 'container' and k ~= 'bad' then
                 if tostring(v._type):sub(1,6) == 'vector' and check_vectors and not is_valid_vector(a) then
                     local key = tostring(obj._type) .. '.' .. k
@@ -88,7 +103,7 @@ local function check_container(obj, path)
                 end
 
                 table.insert(queue, { v, path .. '.' .. k })
-            
+
             elseif v and v._kind == 'struct' then
                 local t = v._type
 
@@ -156,7 +171,7 @@ local function check_container(obj, path)
                         and not (obj._type == df.unit and k == 'idle_area_type')
                         and not (obj._type == df.history_event_body_abusedst.T_props)
                         and not (field._type == df.skill_rating)
-                        and field.value >= -1 and field.value < 1024 then                        
+                        and field.value >= -1 and field.value < 1024 then
                             local key = tostring(obj._type) .. '.' .. k .. tostring(field.value)
                             if not checkedp[key] then
                                 checkedp[key] = true
@@ -193,3 +208,4 @@ while #queue > 0 do
     table.remove(queue, #queue)
     check_container(v[1], v[2])
 end
+print(count .. ' scanned')
