@@ -52,7 +52,8 @@ local function is_valid_vector(ref)
         return true
     end
 
-    if ints[1] == 0 then
+    -- vector<bool>: ptr, int, ptr
+    if df.reinterpret_cast('int32_t', ints:_displace(1)).value == 0 then
         return ints[0] <= ints[2]
     end
 
